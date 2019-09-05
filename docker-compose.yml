@@ -1,0 +1,97 @@
+version: "3.5"
+
+x-defaults: &defaults
+  restart: unless-stopped
+  image: sentry:9-onbuild
+  depends_on:
+    - redis
+    - postgres
+    - memcached
+  env_file: .env
+  volumes:
+    - sentry-data:/var/lib/sentry/files
+    - ./sentry.conf.py:/etc/sentry/sentry.conf.py
+
+services:
+  memcached:
+    restart: unless-stopped
+    image: memcached:1.5-alpine
+    container_name: impactblue.sentry-memcached
+    networks:
+      network:
+        aliases:
+          - sentry-memcached
+
+  redis:
+    restart: unless-stopped
+    image: redis:3.2-alpine
+    container_name: impactblue.sentry-redis
+    networks:
+      network:
+        aliases:
+          - sentry-redis
+
+  postgres:
+    restart: unless-stopped
+    image: postgres:9.5
+    volumes:
+      - sentry-postgres:/var/lib/postgresql/data
+    container_name: impactblue.sentry-postgres
+    networks:
+      network:
+        aliases:
+          - sentry-postgres
+
+  web:
+    <<: *defaults
+    ports:
+      - "9000:9000"
+    container_name: impactblue.sentry-web
+    environment:
+      SENTRY_MEMCACHED_HOST: sentry-memcached
+      SENTRY_REDIS_HOST: sentry-redis
+      SENTRY_POSTGRES_HOST: sentry-postgres
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      VIRTUAL_HOST: ${HOST}
+      LETSENCRYPT_HOST: ${HOST}
+    networks:
+      network:
+        aliases:
+          - sentry-web
+
+  cron:
+    <<: *defaults
+    command: run cron
+    container_name: impactblue.sentry-cron
+    environment:
+      SENTRY_MEMCACHED_HOST: sentry-memcached
+      SENTRY_REDIS_HOST: sentry-redis
+      SENTRY_POSTGRES_HOST: sentry-postgres
+    networks:
+      network:
+        aliases:
+          - sentry-cron
+
+  worker:
+    <<: *defaults
+    command: run worker
+    container_name: impactblue.sentry-worker
+    environment:
+      SENTRY_MEMCACHED_HOST: sentry-memcached
+      SENTRY_REDIS_HOST: sentry-redis
+      SENTRY_POSTGRES_HOST: sentry-postgres
+    networks:
+      network:
+        aliases:
+          - sentry-worker
+
+volumes:
+  sentry-data:
+    external: true
+  sentry-postgres:
+    external: true
+
+networks:
+  network:
+    name: impactblue.network
